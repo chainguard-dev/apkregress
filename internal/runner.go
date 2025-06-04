@@ -14,10 +14,10 @@ import (
 )
 
 type TestResult struct {
-	Package     string
-	WithRepo    bool
-	Success     bool
-	Error       error
+	Package  string
+	WithRepo bool
+	Success  bool
+	Error    error
 }
 
 type RegressionTestRunner struct {
@@ -35,7 +35,7 @@ func NewRegressionTestRunner(packageName, apkRepo, wolfiOSPath string, concurren
 	// Create log directory with timestamp
 	timestamp := time.Now().Format("20060102-150405")
 	logDir := filepath.Join("logs", fmt.Sprintf("regression-test-%s-%s", packageName, timestamp))
-	
+
 	return &RegressionTestRunner{
 		packageName: packageName,
 		apkRepo:     apkRepo,
@@ -53,7 +53,7 @@ func (r *RegressionTestRunner) Run() error {
 	if err := os.MkdirAll(r.logDir, 0755); err != nil {
 		return fmt.Errorf("failed to create log directory %s: %w", r.logDir, err)
 	}
-	
+
 	reverseDeps, err := r.apkrane.GetReverseDependencies(r.packageName)
 	if err != nil {
 		return fmt.Errorf("failed to get reverse dependencies: %w", err)
@@ -82,13 +82,13 @@ func (r *RegressionTestRunner) Run() error {
 
 			// First test with repo
 			err := r.melange.TestPackage(packageName, true, r.apkRepo)
-			
+
 			// Skip package if YAML file not found
 			if errors.Is(err, ErrPackageYAMLNotFound) {
 				atomic.AddInt64(&skippedCount, 1)
 				return
 			}
-			
+
 			withRepoResult := TestResult{
 				Package:  packageName,
 				WithRepo: true,
@@ -100,12 +100,12 @@ func (r *RegressionTestRunner) Run() error {
 			// Only test without repo if test with repo failed
 			if !withRepoResult.Success {
 				err := r.melange.TestPackage(packageName, false, r.apkRepo)
-				
+
 				// Skip if YAML file not found (shouldn't happen since we already checked, but for safety)
 				if errors.Is(err, ErrPackageYAMLNotFound) {
 					return
 				}
-				
+
 				results <- TestResult{
 					Package:  packageName,
 					WithRepo: false,
@@ -126,7 +126,7 @@ func (r *RegressionTestRunner) Run() error {
 
 func (r *RegressionTestRunner) analyzeResults(results chan TestResult, expectedPackages int, skippedPackages int) error {
 	packageResults := make(map[string]map[bool]TestResult)
-	
+
 	for result := range results {
 		if packageResults[result.Package] == nil {
 			packageResults[result.Package] = make(map[bool]TestResult)

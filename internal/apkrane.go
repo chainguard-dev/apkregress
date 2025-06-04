@@ -37,7 +37,7 @@ func (a *ApkraneClient) GetReverseDependencies(packageName string) ([]string, er
 	}
 
 	indexURL := fmt.Sprintf("https://packages.wolfi.dev/os/%s/APKINDEX.tar.gz", arch)
-	
+
 	cmd := exec.Command("apkrane", "ls", "--json", "--latest", indexURL)
 	output, err := cmd.Output()
 	if err != nil {
@@ -51,7 +51,7 @@ func (a *ApkraneClient) GetReverseDependencies(packageName string) ([]string, er
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		
+
 		var pkg Package
 		if err := json.Unmarshal([]byte(line), &pkg); err != nil {
 			if a.verbose {
@@ -61,7 +61,7 @@ func (a *ApkraneClient) GetReverseDependencies(packageName string) ([]string, er
 		}
 		packages = append(packages, pkg)
 	}
-	
+
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("failed to read apkrane output: %w", err)
 	}
@@ -71,7 +71,7 @@ func (a *ApkraneClient) GetReverseDependencies(packageName string) ([]string, er
 		if pkg.Dependencies == nil {
 			continue
 		}
-		
+
 		for _, dep := range pkg.Dependencies {
 			if strings.Contains(dep, packageName) {
 				if pkg.Origin != "" {
