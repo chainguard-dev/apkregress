@@ -1,11 +1,13 @@
 package internal
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 )
 
 type MelangeClient struct {
@@ -16,6 +18,9 @@ type MelangeClient struct {
 
 // ErrPackageYAMLNotFound indicates that the package YAML file doesn't exist
 var ErrPackageYAMLNotFound = errors.New("package YAML file not found")
+
+// ErrTestHung indicates that a test exceeded the timeout and was killed
+var ErrTestHung = errors.New("test hung and was killed after timeout")
 
 func NewMelangeClient(repoPath string, verbose bool, logDir string) *MelangeClient {
 	return &MelangeClient{
@@ -77,9 +82,43 @@ func (m *MelangeClient) TestPackage(packageName string, withRepo bool, apkRepo s
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("make test/%s failed: %w", packageName, err)
+	// Create context with 30-minute timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start make test/%s: %w", packageName, err)
 	}
 
-	return nil
+	// Channel to capture the result of cmd.Wait()
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	// Wait for either completion or timeout
+	select {
+	case err := <-done:
+		if err != nil {
+			return fmt.Errorf("make test/%s failed: %w", packageName, err)
+		}
+		return nil
+	case <-ctx.Done():
+		// Timeout occurred, kill the process
+		if cmd.Process != nil {
+			cmd.Process.Kill()
+		}
+		// Wait for the process to actually exit
+		<-done
+
+		// Write timeout message to log
+		fmt.Fprintf(logFile, "\n\n=== TEST HUNG - KILLED AFTER 30 MINUTES ===\n")
+
+		if m.verbose {
+			fmt.Printf("Test %s hung and was killed after 30 minutes\n", packageName)
+		}
+
+		return ErrTestHung
+	}
 }

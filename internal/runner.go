@@ -18,6 +18,7 @@ type TestResult struct {
 	WithRepo bool
 	Success  bool
 	Error    error
+	Hung     bool
 }
 
 type RegressionTestRunner struct {
@@ -141,6 +142,7 @@ func (r *RegressionTestRunner) Run() error {
 				WithRepo: true,
 				Success:  err == nil,
 				Error:    err,
+				Hung:     errors.Is(err, ErrTestHung),
 			}
 			results <- withRepoResult
 
@@ -159,6 +161,7 @@ func (r *RegressionTestRunner) Run() error {
 					WithRepo: false,
 					Success:  err == nil,
 					Error:    err,
+					Hung:     errors.Is(err, ErrTestHung),
 				}
 			}
 
@@ -186,6 +189,7 @@ func (r *RegressionTestRunner) analyzeResults(results chan TestResult, expectedP
 	}
 
 	var regressions []string
+	var hungTests []string
 	var successCount, failureCount int
 
 	fmt.Println("\n=== Test Results ===")
@@ -195,6 +199,22 @@ func (r *RegressionTestRunner) analyzeResults(results chan TestResult, expectedP
 
 		if !hasWithRepo {
 			fmt.Printf("⚠️  %s: Incomplete test results\n", pkg)
+			continue
+		}
+
+		// Check for hung tests first
+		if withRepoResult.Hung {
+			hungTests = append(hungTests, fmt.Sprintf("%s (with repo)", pkg))
+			fmt.Printf("⏰ %s: HUNG (with repo - killed after 30 minutes)\n", pkg)
+			if hasWithoutRepo && withoutRepoResult.Hung {
+				hungTests = append(hungTests, fmt.Sprintf("%s (without repo)", pkg))
+				fmt.Printf("⏰ %s: HUNG (without repo - killed after 30 minutes)\n", pkg)
+			}
+			continue
+		}
+		if hasWithoutRepo && withoutRepoResult.Hung {
+			hungTests = append(hungTests, fmt.Sprintf("%s (without repo)", pkg))
+			fmt.Printf("⏰ %s: HUNG (without repo - killed after 30 minutes)\n", pkg)
 			continue
 		}
 
@@ -226,8 +246,16 @@ func (r *RegressionTestRunner) analyzeResults(results chan TestResult, expectedP
 	fmt.Printf("Packages skipped (no YAML): %d\n", skippedPackages)
 	fmt.Printf("Packages tested: %d\n", len(packageResults))
 	fmt.Printf("Regressions detected: %d\n", len(regressions))
+	fmt.Printf("Hung tests: %d\n", len(hungTests))
 	fmt.Printf("Successful packages: %d\n", successCount)
 	fmt.Printf("Failed packages: %d\n", failureCount)
+
+	if len(hungTests) > 0 {
+		fmt.Printf("\nTests that hung (killed after 30 minutes):\n")
+		for _, test := range hungTests {
+			fmt.Printf("  - %s\n", test)
+		}
+	}
 
 	if len(regressions) > 0 {
 		fmt.Printf("\nPackages with regressions:\n")
@@ -235,6 +263,10 @@ func (r *RegressionTestRunner) analyzeResults(results chan TestResult, expectedP
 			fmt.Printf("  - %s\n", pkg)
 		}
 		return fmt.Errorf("found %d regressions", len(regressions))
+	}
+
+	if len(hungTests) > 0 {
+		return fmt.Errorf("found %d hung tests", len(hungTests))
 	}
 
 	return nil
