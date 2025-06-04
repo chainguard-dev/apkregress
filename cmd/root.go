@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/chainguard-dev/apk-regression-test-runner/internal"
+	"github.com/javacruft/apk-regression-test-runner/internal"
 	"github.com/spf13/cobra"
 )
 

@@ -1,4 +1,4 @@
-module github.com/chainguard-dev/apk-regression-test-runner
+module github.com/javacruft/apk-regression-test-runner
 
 go 1.21
 

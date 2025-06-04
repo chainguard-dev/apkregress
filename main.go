@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/chainguard-dev/apk-regression-test-runner/cmd"
+	"github.com/javacruft/apk-regression-test-runner/cmd"
 )
 
 func main() {
