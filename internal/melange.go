@@ -83,7 +83,7 @@ func (m *MelangeClient) TestPackage(packageName string, withRepo bool, apkRepo s
 	cmd.Stderr = logFile
 
 	// Create context with 30-minute timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	// Start the command
