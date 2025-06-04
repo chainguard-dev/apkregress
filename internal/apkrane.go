@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"sort"
@@ -12,7 +13,8 @@ import (
 )
 
 type ApkraneClient struct {
-	verbose bool
+	verbose  bool
+	repoType string
 }
 
 type Package struct {
@@ -20,10 +22,43 @@ type Package struct {
 	Dependencies []string `json:"Dependencies"`
 }
 
-func NewApkraneClient(verbose bool) *ApkraneClient {
+func NewApkraneClient(verbose bool, repoType string) *ApkraneClient {
 	return &ApkraneClient{
-		verbose: verbose,
+		verbose:  verbose,
+		repoType: repoType,
 	}
+}
+
+func (a *ApkraneClient) getIndexURL(arch string) string {
+	switch a.repoType {
+	case "enterprise":
+		return fmt.Sprintf("https://apk.cgr.dev/chainguard-private/%s/APKINDEX.tar.gz", arch)
+	case "extras":
+		return fmt.Sprintf("https://packages.cgr.dev/extras/%s/APKINDEX.tar.gz", arch)
+	default: // "wolfi"
+		return fmt.Sprintf("https://packages.wolfi.dev/os/%s/APKINDEX.tar.gz", arch)
+	}
+}
+
+func (a *ApkraneClient) setupAuth(cmd *exec.Cmd) error {
+	// Get authentication token using chainctl
+	tokenCmd := exec.Command("chainctl", "auth", "token", "--audience", "apk.cgr.dev")
+	tokenOutput, err := tokenCmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to get authentication token: %w", err)
+	}
+
+	token := strings.TrimSpace(string(tokenOutput))
+	httpAuth := fmt.Sprintf("basic:apk.cgr.dev:user:%s", token)
+
+	// Set environment variable for the command
+	cmd.Env = append(os.Environ(), fmt.Sprintf("HTTP_AUTH=%s", httpAuth))
+
+	if a.verbose {
+		fmt.Printf("Setting up authentication for %s repository\n", a.repoType)
+	}
+
+	return nil
 }
 
 func (a *ApkraneClient) GetReverseDependencies(packageName string) ([]string, error) {
@@ -36,9 +71,16 @@ func (a *ApkraneClient) GetReverseDependencies(packageName string) ([]string, er
 		arch = "x86_64"
 	}
 
-	indexURL := fmt.Sprintf("https://packages.wolfi.dev/os/%s/APKINDEX.tar.gz", arch)
+	indexURL := a.getIndexURL(arch)
 
 	cmd := exec.Command("apkrane", "ls", "--json", "--latest", indexURL)
+
+	// Set up authentication for enterprise and extras repositories
+	if a.repoType == "enterprise" || a.repoType == "extras" {
+		if err := a.setupAuth(cmd); err != nil {
+			return nil, fmt.Errorf("failed to setup authentication: %w", err)
+		}
+	}
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to run apkrane ls for %s: %w", indexURL, err)

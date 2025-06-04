@@ -9,25 +9,25 @@ import (
 )
 
 type MelangeClient struct {
-	wolfiOSPath string
-	verbose     bool
-	logDir      string
+	repoPath string
+	verbose  bool
+	logDir   string
 }
 
 // ErrPackageYAMLNotFound indicates that the package YAML file doesn't exist
 var ErrPackageYAMLNotFound = errors.New("package YAML file not found")
 
-func NewMelangeClient(wolfiOSPath string, verbose bool, logDir string) *MelangeClient {
+func NewMelangeClient(repoPath string, verbose bool, logDir string) *MelangeClient {
 	return &MelangeClient{
-		wolfiOSPath: wolfiOSPath,
-		verbose:     verbose,
-		logDir:      logDir,
+		repoPath: repoPath,
+		verbose:  verbose,
+		logDir:   logDir,
 	}
 }
 
 func (m *MelangeClient) TestPackage(packageName string, withRepo bool, apkRepo string) error {
 	// Check if the package YAML file exists
-	yamlFilePath := filepath.Join(m.wolfiOSPath, fmt.Sprintf("%s.yaml", packageName))
+	yamlFilePath := filepath.Join(m.repoPath, fmt.Sprintf("%s.yaml", packageName))
 	if _, err := os.Stat(yamlFilePath); os.IsNotExist(err) {
 		if m.verbose {
 			fmt.Printf("Skipping %s: YAML file not found at %s\n", packageName, yamlFilePath)
@@ -73,7 +73,7 @@ func (m *MelangeClient) TestPackage(packageName string, withRepo bool, apkRepo s
 		cmd.Env = append(os.Environ(), fmt.Sprintf("TMPDIR=%s", tempDir))
 	}
 
-	cmd.Dir = m.wolfiOSPath
+	cmd.Dir = m.repoPath
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 

@@ -23,7 +23,8 @@ type TestResult struct {
 type RegressionTestRunner struct {
 	packageName    string
 	apkRepo        string
-	wolfiOSPath    string
+	repoPath       string
+	repoType       string
 	concurrency    int
 	verbose        bool
 	logDir         string
@@ -71,7 +72,7 @@ func (r *RegressionTestRunner) updateProgress() {
 	}
 }
 
-func NewRegressionTestRunner(packageName, apkRepo, wolfiOSPath string, concurrency int, verbose bool) *RegressionTestRunner {
+func NewRegressionTestRunner(packageName, apkRepo, repoPath, repoType string, concurrency int, verbose bool) *RegressionTestRunner {
 	// Create log directory with timestamp
 	timestamp := time.Now().Format("20060102-150405")
 	logDir := filepath.Join("logs", fmt.Sprintf("regression-test-%s-%s", packageName, timestamp))
@@ -79,12 +80,13 @@ func NewRegressionTestRunner(packageName, apkRepo, wolfiOSPath string, concurren
 	return &RegressionTestRunner{
 		packageName: packageName,
 		apkRepo:     apkRepo,
-		wolfiOSPath: wolfiOSPath,
+		repoPath:    repoPath,
+		repoType:    repoType,
 		concurrency: concurrency,
 		verbose:     verbose,
 		logDir:      logDir,
-		apkrane:     NewApkraneClient(verbose),
-		melange:     NewMelangeClient(wolfiOSPath, verbose, logDir),
+		apkrane:     NewApkraneClient(verbose, repoType),
+		melange:     NewMelangeClient(repoPath, verbose, logDir),
 	}
 }
 

@@ -12,7 +12,8 @@ import (
 var (
 	packageName string
 	apkRepo     string
-	wolfiOSPath string
+	repoPath    string
+	repoType    string
 	concurrency int
 	verbose     bool
 )
@@ -22,7 +23,8 @@ var rootCmd = &cobra.Command{
 	Short: "Test reverse dependencies of a package for regressions",
 	Long: `A tool that uses apkrane to find reverse dependencies of a package
 and melange to test each reverse dependency against a provided APK repository.
-Tests are run with and without the APK repository to detect regressions.`,
+Tests are run with and without the APK repository to detect regressions.
+Supports wolfi-dev/os, chainguard-dev/enterprise-packages, and chainguard-dev/extra-packages repositories.`,
 	RunE: runRegressionTest,
 }
 
@@ -33,28 +35,34 @@ func Execute() error {
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&packageName, "package", "p", "", "Package name to find reverse dependencies for (required)")
 	rootCmd.PersistentFlags().StringVarP(&apkRepo, "repo", "r", "", "APK repository URL to test against (required)")
-	rootCmd.PersistentFlags().StringVarP(&wolfiOSPath, "wolfi-os", "w", "", "Path to wolfi-dev/os repository (required)")
+	rootCmd.PersistentFlags().StringVarP(&repoPath, "repo-path", "w", "", "Path to package repository (wolfi-dev/os, chainguard-dev/enterprise-packages, or chainguard-dev/extra-packages) (required)")
+	rootCmd.PersistentFlags().StringVarP(&repoType, "repo-type", "t", "wolfi", "Repository type: wolfi, enterprise, or extras")
 	rootCmd.PersistentFlags().IntVarP(&concurrency, "concurrency", "c", 4, "Number of concurrent test jobs")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 
 	rootCmd.MarkPersistentFlagRequired("package")
 	rootCmd.MarkPersistentFlagRequired("repo")
-	rootCmd.MarkPersistentFlagRequired("wolfi-os")
+	rootCmd.MarkPersistentFlagRequired("repo-path")
 }
 
 func runRegressionTest(cmd *cobra.Command, args []string) error {
-	if !filepath.IsAbs(wolfiOSPath) {
-		absPath, err := filepath.Abs(wolfiOSPath)
+	if !filepath.IsAbs(repoPath) {
+		absPath, err := filepath.Abs(repoPath)
 		if err != nil {
-			return fmt.Errorf("failed to resolve wolfi-os path: %w", err)
+			return fmt.Errorf("failed to resolve repository path: %w", err)
 		}
-		wolfiOSPath = absPath
+		repoPath = absPath
 	}
 
-	if _, err := os.Stat(wolfiOSPath); os.IsNotExist(err) {
-		return fmt.Errorf("wolfi-os path does not exist: %s", wolfiOSPath)
+	if _, err := os.Stat(repoPath); os.IsNotExist(err) {
+		return fmt.Errorf("repository path does not exist: %s", repoPath)
 	}
 
-	runner := internal.NewRegressionTestRunner(packageName, apkRepo, wolfiOSPath, concurrency, verbose)
+	// Validate repository type
+	if repoType != "wolfi" && repoType != "enterprise" && repoType != "extras" {
+		return fmt.Errorf("invalid repository type: %s (must be wolfi, enterprise, or extras)", repoType)
+	}
+
+	runner := internal.NewRegressionTestRunner(packageName, apkRepo, repoPath, repoType, concurrency, verbose)
 	return runner.Run()
 }

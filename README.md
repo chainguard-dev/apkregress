@@ -14,7 +14,11 @@ A Go-based tool that uses apkrane to generate a list of reverse dependencies of 
 - Go 1.21+
 - `apkrane` command-line tool
 - `make` command
-- Access to wolfi-dev/os repository
+- For enterprise and extras repositories: `chainctl` command-line tool for authentication
+- Access to one of the supported repositories:
+  - wolfi-dev/os
+  - chainguard-dev/enterprise-packages
+  - chainguard-dev/extra-packages
 
 ## Installation
 
@@ -28,7 +32,8 @@ go build -o apk-regression-test-runner .
 ./apk-regression-test-runner \
   --package <package-name> \
   --repo <apk-repository-url> \
-  --wolfi-os <path-to-wolfi-os-repo> \
+  --repo-path <path-to-package-repo> \
+  --repo-type <wolfi|enterprise|extras> \
   --concurrency 4 \
   --verbose
 ```
@@ -37,24 +42,51 @@ go build -o apk-regression-test-runner .
 
 - `--package, -p`: Package name to find reverse dependencies for (required)
 - `--repo, -r`: APK repository URL to test against (required)
-- `--wolfi-os, -w`: Path to wolfi-dev/os repository (required)
+- `--repo-path, -w`: Path to package repository (required)
+- `--repo-type, -t`: Repository type: wolfi, enterprise, or extras (default: wolfi)
 - `--concurrency, -c`: Number of concurrent test jobs (default: 4)
 - `--verbose, -v`: Enable verbose output
 
-### Example
+### Examples
 
+#### Wolfi Repository
 ```bash
 ./apk-regression-test-runner \
   --package openssl \
   --repo https://packages.wolfi.dev/os/x86_64/APKINDEX.tar.gz \
-  --wolfi-os /path/to/wolfi-dev/os \
+  --repo-path /path/to/wolfi-dev/os \
+  --repo-type wolfi \
+  --concurrency 8 \
+  --verbose
+```
+
+#### Enterprise Repository
+```bash
+# Requires chainctl authentication
+./apk-regression-test-runner \
+  --package openssl \
+  --repo https://apk.cgr.dev/chainguard-private/x86_64/APKINDEX.tar.gz \
+  --repo-path /path/to/chainguard-dev/enterprise-packages \
+  --repo-type enterprise \
+  --concurrency 8 \
+  --verbose
+```
+
+#### Extras Repository
+```bash
+# Requires chainctl authentication
+./apk-regression-test-runner \
+  --package openssl \
+  --repo https://packages.cgr.dev/extras/x86_64/APKINDEX.tar.gz \
+  --repo-path /path/to/chainguard-dev/extra-packages \
+  --repo-type extras \
   --concurrency 8 \
   --verbose
 ```
 
 ## How it works
 
-1. Uses apkrane to query the Wolfi package index and find reverse dependencies
+1. Uses apkrane to query the specified package index (Wolfi, Enterprise, or Extras) and find reverse dependencies
 2. For each reverse dependency, runs two tests:
    - With the provided APK repository (using `MELANGE_EXTRA_OPTS`)
    - Without the provided APK repository
