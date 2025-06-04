@@ -21,14 +21,54 @@ type TestResult struct {
 }
 
 type RegressionTestRunner struct {
-	packageName string
-	apkRepo     string
-	wolfiOSPath string
-	concurrency int
-	verbose     bool
-	logDir      string
-	apkrane     *ApkraneClient
-	melange     *MelangeClient
+	packageName    string
+	apkRepo        string
+	wolfiOSPath    string
+	concurrency    int
+	verbose        bool
+	logDir         string
+	apkrane        *ApkraneClient
+	melange        *MelangeClient
+	completedTests int64
+	totalTests     int64
+	startTime      time.Time
+}
+
+func (r *RegressionTestRunner) updateProgress() {
+	if r.verbose {
+		return // Don't show progress in verbose mode
+	}
+
+	completed := atomic.AddInt64(&r.completedTests, 1)
+	total := r.totalTests
+
+	if completed > total {
+		return // Safety check
+	}
+
+	// Calculate progress percentage
+	progress := float64(completed) / float64(total) * 100
+
+	// Calculate elapsed time and estimate remaining time
+	elapsed := time.Since(r.startTime)
+	var eta time.Duration
+	if completed > 0 {
+		avgTimePerTest := elapsed / time.Duration(completed)
+		remaining := total - completed
+		eta = avgTimePerTest * time.Duration(remaining)
+	}
+
+	// Format the progress update
+	if eta > 0 {
+		fmt.Printf("\rProgress: %d/%d (%.1f%%) - ETA: %v", completed, total, progress, eta.Round(time.Second))
+	} else {
+		fmt.Printf("\rProgress: %d/%d (%.1f%%)", completed, total, progress)
+	}
+
+	// Print newline when complete
+	if completed == total {
+		fmt.Println()
+	}
 }
 
 func NewRegressionTestRunner(packageName, apkRepo, wolfiOSPath string, concurrency int, verbose bool) *RegressionTestRunner {
@@ -67,6 +107,10 @@ func (r *RegressionTestRunner) Run() error {
 	fmt.Printf("Testing %d reverse dependencies with concurrency %d\n", len(reverseDeps), r.concurrency)
 	fmt.Printf("Logs will be saved to: %s\n", r.logDir)
 
+	// Initialize progress tracking
+	r.totalTests = int64(len(reverseDeps))
+	r.startTime = time.Now()
+
 	results := make(chan TestResult, len(reverseDeps)*2)
 	ctx := context.Background()
 	sem := semaphore.NewWeighted(int64(r.concurrency))
@@ -86,6 +130,7 @@ func (r *RegressionTestRunner) Run() error {
 			// Skip package if YAML file not found
 			if errors.Is(err, ErrPackageYAMLNotFound) {
 				atomic.AddInt64(&skippedCount, 1)
+				r.updateProgress()
 				return
 			}
 
@@ -103,6 +148,7 @@ func (r *RegressionTestRunner) Run() error {
 
 				// Skip if YAML file not found (shouldn't happen since we already checked, but for safety)
 				if errors.Is(err, ErrPackageYAMLNotFound) {
+					r.updateProgress()
 					return
 				}
 
@@ -113,6 +159,9 @@ func (r *RegressionTestRunner) Run() error {
 					Error:    err,
 				}
 			}
+
+			// Update progress after completing all tests for this package
+			r.updateProgress()
 		}(pkg)
 	}
 

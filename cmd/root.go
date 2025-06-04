@@ -5,16 +5,16 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/spf13/cobra"
 	"github.com/chainguard-dev/apk-regression-test-runner/internal"
+	"github.com/spf13/cobra"
 )
 
 var (
-	packageName    string
-	apkRepo        string
-	wolfiOSPath    string
-	concurrency    int
-	verbose        bool
+	packageName string
+	apkRepo     string
+	wolfiOSPath string
+	concurrency int
+	verbose     bool
 )
 
 var rootCmd = &cobra.Command{
