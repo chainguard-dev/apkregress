@@ -102,6 +102,31 @@ func NewRegressionTestRunner(packageName, apkRepo, repoPath, repoType string, co
 	}
 }
 
+func NewRegressionTestRunnerFromPackageList(packages []string, apkRepo, repoPath, repoType string, concurrency int, verbose bool, hangTimeout time.Duration, markdownOutput bool) *RegressionTestRunner {
+	// Create log directory with timestamp
+	timestamp := time.Now().Format("20060102-150405")
+	logDir := filepath.Join("logs", fmt.Sprintf("package-list-test-%s", timestamp))
+
+	// Default to 30 minutes if no timeout specified
+	if hangTimeout == 0 {
+		hangTimeout = 30 * time.Minute
+	}
+
+	return &RegressionTestRunner{
+		packageName:    fmt.Sprintf("%d packages from file", len(packages)),
+		apkRepo:        apkRepo,
+		repoPath:       repoPath,
+		repoType:       repoType,
+		concurrency:    concurrency,
+		verbose:        verbose,
+		logDir:         logDir,
+		hangTimeout:    hangTimeout,
+		markdownOutput: markdownOutput,
+		apkrane:        NewApkraneClient(verbose, repoType),
+		melange:        NewMelangeClient(repoPath, verbose, logDir, hangTimeout),
+	}
+}
+
 func (r *RegressionTestRunner) Run() error {
 	// Create log directory
 	if err := os.MkdirAll(r.logDir, 0755); err != nil {
@@ -181,6 +206,82 @@ func (r *RegressionTestRunner) Run() error {
 	}()
 
 	return r.analyzeResults(results, len(reverseDeps))
+}
+
+func (r *RegressionTestRunner) RunFromPackageList(packages []string) error {
+	// Create log directory
+	if err := os.MkdirAll(r.logDir, 0755); err != nil {
+		return fmt.Errorf("failed to create log directory %s: %w", r.logDir, err)
+	}
+
+	if len(packages) == 0 {
+		fmt.Println("No packages provided")
+		return nil
+	}
+
+	fmt.Printf("Testing %d packages with concurrency %d\n", len(packages), r.concurrency)
+	fmt.Printf("Logs will be saved to: %s\n", r.logDir)
+
+	// Initialize progress tracking
+	r.totalTests = int64(len(packages))
+	r.startTime = time.Now()
+
+	results := make(chan TestResult, len(packages)*2)
+	ctx := context.Background()
+	sem := semaphore.NewWeighted(int64(r.concurrency))
+	var wg sync.WaitGroup
+
+	for _, pkg := range packages {
+		wg.Add(1)
+		go func(packageName string) {
+			defer wg.Done()
+			sem.Acquire(ctx, 1)
+			defer sem.Release(1)
+
+			// First test with repo
+			err := r.melange.TestPackage(packageName, true, r.apkRepo)
+
+			withRepoResult := TestResult{
+				Package:  packageName,
+				WithRepo: true,
+				Success:  err == nil,
+				Error:    err,
+				Hung:     errors.Is(err, ErrTestHung),
+				Skipped:  errors.Is(err, ErrPackageYAMLNotFound),
+			}
+			results <- withRepoResult
+
+			// Only test without repo if test with repo failed and wasn't skipped
+			if !withRepoResult.Success && !withRepoResult.Skipped {
+				err := r.melange.TestPackage(packageName, false, r.apkRepo)
+
+				// Skip if YAML file not found (shouldn't happen since we already checked, but for safety)
+				if errors.Is(err, ErrPackageYAMLNotFound) {
+					r.updateProgress()
+					return
+				}
+
+				results <- TestResult{
+					Package:  packageName,
+					WithRepo: false,
+					Success:  err == nil,
+					Error:    err,
+					Hung:     errors.Is(err, ErrTestHung),
+					Skipped:  errors.Is(err, ErrPackageYAMLNotFound),
+				}
+			}
+
+			// Update progress after completing all tests for this package
+			r.updateProgress()
+		}(pkg)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	return r.analyzeResults(results, len(packages))
 }
 
 func (r *RegressionTestRunner) analyzeResults(results chan TestResult, expectedPackages int) error {
