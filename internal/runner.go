@@ -31,6 +31,7 @@ type RegressionTestRunner struct {
 	verbose        bool
 	logDir         string
 	hangTimeout    time.Duration
+	markdownOutput bool
 	apkrane        *ApkraneClient
 	melange        *MelangeClient
 	completedTests int64
@@ -75,7 +76,7 @@ func (r *RegressionTestRunner) updateProgress() {
 	}
 }
 
-func NewRegressionTestRunner(packageName, apkRepo, repoPath, repoType string, concurrency int, verbose bool, hangTimeout time.Duration) *RegressionTestRunner {
+func NewRegressionTestRunner(packageName, apkRepo, repoPath, repoType string, concurrency int, verbose bool, hangTimeout time.Duration, markdownOutput bool) *RegressionTestRunner {
 	// Create log directory with timestamp
 	timestamp := time.Now().Format("20060102-150405")
 	logDir := filepath.Join("logs", fmt.Sprintf("regression-test-%s-%s", packageName, timestamp))
@@ -86,16 +87,17 @@ func NewRegressionTestRunner(packageName, apkRepo, repoPath, repoType string, co
 	}
 
 	return &RegressionTestRunner{
-		packageName: packageName,
-		apkRepo:     apkRepo,
-		repoPath:    repoPath,
-		repoType:    repoType,
-		concurrency: concurrency,
-		verbose:     verbose,
-		logDir:      logDir,
-		hangTimeout: hangTimeout,
-		apkrane:     NewApkraneClient(verbose, repoType),
-		melange:     NewMelangeClient(repoPath, verbose, logDir, hangTimeout),
+		packageName:    packageName,
+		apkRepo:        apkRepo,
+		repoPath:       repoPath,
+		repoType:       repoType,
+		concurrency:    concurrency,
+		verbose:        verbose,
+		logDir:         logDir,
+		hangTimeout:    hangTimeout,
+		markdownOutput: markdownOutput,
+		apkrane:        NewApkraneClient(verbose, repoType),
+		melange:        NewMelangeClient(repoPath, verbose, logDir, hangTimeout),
 	}
 }
 
@@ -252,27 +254,36 @@ func (r *RegressionTestRunner) analyzeResults(results chan TestResult, expectedP
 		}
 	}
 
-	fmt.Printf("\n=== Summary ===\n")
-	fmt.Printf("Total packages found: %d\n", expectedPackages)
-	fmt.Printf("Packages skipped (no YAML): %d\n", skippedCount)
-	fmt.Printf("Packages tested: %d\n", len(packageResults)-skippedCount)
-	fmt.Printf("Regressions detected: %d\n", len(regressions))
-	fmt.Printf("Hung tests: %d\n", len(hungTests))
-	fmt.Printf("Successful packages: %d\n", successCount)
-	fmt.Printf("Failed packages: %d\n", failureCount)
+	if r.markdownOutput {
+		r.printMarkdownSummary(expectedPackages, skippedCount, len(packageResults)-skippedCount, len(regressions), len(hungTests), successCount, failureCount, regressions, hungTests)
+	} else {
+		fmt.Printf("\n=== Summary ===\n")
+		fmt.Printf("Total packages found: %d\n", expectedPackages)
+		fmt.Printf("Packages skipped (no YAML): %d\n", skippedCount)
+		fmt.Printf("Packages tested: %d\n", len(packageResults)-skippedCount)
+		fmt.Printf("Regressions detected: %d\n", len(regressions))
+		fmt.Printf("Hung tests: %d\n", len(hungTests))
+		fmt.Printf("Successful packages: %d\n", successCount)
+		fmt.Printf("Failed packages: %d\n", failureCount)
+	}
 
-	if len(hungTests) > 0 {
-		fmt.Printf("\nTests that hung (killed after 30 minutes):\n")
-		for _, test := range hungTests {
-			fmt.Printf("  - %s\n", test)
+	if !r.markdownOutput {
+		if len(hungTests) > 0 {
+			fmt.Printf("\nTests that hung (killed after 30 minutes):\n")
+			for _, test := range hungTests {
+				fmt.Printf("  - %s\n", test)
+			}
+		}
+
+		if len(regressions) > 0 {
+			fmt.Printf("\nPackages with regressions:\n")
+			for _, pkg := range regressions {
+				fmt.Printf("  - %s\n", pkg)
+			}
 		}
 	}
 
 	if len(regressions) > 0 {
-		fmt.Printf("\nPackages with regressions:\n")
-		for _, pkg := range regressions {
-			fmt.Printf("  - %s\n", pkg)
-		}
 		return fmt.Errorf("found %d regressions", len(regressions))
 	}
 
@@ -281,4 +292,46 @@ func (r *RegressionTestRunner) analyzeResults(results chan TestResult, expectedP
 	}
 
 	return nil
+}
+
+func (r *RegressionTestRunner) printMarkdownSummary(totalPackages, skippedCount, testedCount, regressionsCount, hungCount, successCount, failureCount int, regressions, hungTests []string) {
+	fmt.Printf("\n## APK Regression Test Summary\n\n")
+	fmt.Printf("**Package:** %s  \n", r.packageName)
+	fmt.Printf("**APK Repository:** %s  \n", r.apkRepo)
+	fmt.Printf("**Test Duration:** %v  \n\n", time.Since(r.startTime).Round(time.Second))
+
+	fmt.Printf("### Test Results\n\n")
+	fmt.Printf("| Metric | Count |\n")
+	fmt.Printf("|--------|-------|\n")
+	fmt.Printf("| Total packages found | %d |\n", totalPackages)
+	fmt.Printf("| Packages skipped (no YAML) | %d |\n", skippedCount)
+	fmt.Printf("| Packages tested | %d |\n", testedCount)
+	fmt.Printf("| **Regressions detected** | **%d** |\n", regressionsCount)
+	fmt.Printf("| Hung tests | %d |\n", hungCount)
+	fmt.Printf("| Successful packages | %d |\n", successCount)
+	fmt.Printf("| Failed packages | %d |\n", failureCount)
+
+	if regressionsCount > 0 {
+		fmt.Printf("\n### 🔴 Packages with Regressions\n\n")
+		fmt.Printf("The following packages **fail with the new APK repository** but **pass without it**, indicating potential regressions:\n\n")
+		for _, pkg := range regressions {
+			fmt.Printf("- `%s`\n", pkg)
+		}
+	}
+
+	if hungCount > 0 {
+		fmt.Printf("\n### ⏰ Tests That Hung\n\n")
+		fmt.Printf("The following tests were killed after %v timeout:\n\n", r.hangTimeout)
+		for _, test := range hungTests {
+			fmt.Printf("- `%s`\n", test)
+		}
+	}
+
+	if regressionsCount == 0 && hungCount == 0 {
+		fmt.Printf("\n### ✅ All Tests Passed\n\n")
+		fmt.Printf("No regressions were detected. All packages either passed with the new repository or failed consistently in both scenarios.\n")
+	}
+
+	fmt.Printf("\n---\n")
+	fmt.Printf("*Generated by apk-regression-test-runner*\n")
 }
