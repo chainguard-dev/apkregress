@@ -34,7 +34,7 @@ func (a *ApkraneClient) getIndexURL(arch string) string {
 	case "enterprise":
 		return fmt.Sprintf("https://apk.cgr.dev/chainguard-private/%s/APKINDEX.tar.gz", arch)
 	case "extras":
-		return fmt.Sprintf("https://packages.cgr.dev/extras/%s/APKINDEX.tar.gz", arch)
+		return fmt.Sprintf("https://apk.cgr.dev/extra-packages/%s/APKINDEX.tar.gz", arch)
 	default: // "wolfi"
 		return fmt.Sprintf("https://packages.wolfi.dev/os/%s/APKINDEX.tar.gz", arch)
 	}
