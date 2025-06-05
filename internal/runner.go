@@ -19,6 +19,7 @@ type TestResult struct {
 	Success  bool
 	Error    error
 	Hung     bool
+	Skipped  bool
 }
 
 type RegressionTestRunner struct {
@@ -29,6 +30,7 @@ type RegressionTestRunner struct {
 	concurrency    int
 	verbose        bool
 	logDir         string
+	hangTimeout    time.Duration
 	apkrane        *ApkraneClient
 	melange        *MelangeClient
 	completedTests int64
@@ -73,10 +75,15 @@ func (r *RegressionTestRunner) updateProgress() {
 	}
 }
 
-func NewRegressionTestRunner(packageName, apkRepo, repoPath, repoType string, concurrency int, verbose bool) *RegressionTestRunner {
+func NewRegressionTestRunner(packageName, apkRepo, repoPath, repoType string, concurrency int, verbose bool, hangTimeout time.Duration) *RegressionTestRunner {
 	// Create log directory with timestamp
 	timestamp := time.Now().Format("20060102-150405")
 	logDir := filepath.Join("logs", fmt.Sprintf("regression-test-%s-%s", packageName, timestamp))
+
+	// Default to 10 minutes if no timeout specified
+	if hangTimeout == 0 {
+		hangTimeout = 10 * time.Minute
+	}
 
 	return &RegressionTestRunner{
 		packageName: packageName,
@@ -86,8 +93,9 @@ func NewRegressionTestRunner(packageName, apkRepo, repoPath, repoType string, co
 		concurrency: concurrency,
 		verbose:     verbose,
 		logDir:      logDir,
+		hangTimeout: hangTimeout,
 		apkrane:     NewApkraneClient(verbose, repoType),
-		melange:     NewMelangeClient(repoPath, verbose, logDir),
+		melange:     NewMelangeClient(repoPath, verbose, logDir, hangTimeout),
 	}
 }
 
@@ -118,7 +126,6 @@ func (r *RegressionTestRunner) Run() error {
 	ctx := context.Background()
 	sem := semaphore.NewWeighted(int64(r.concurrency))
 	var wg sync.WaitGroup
-	var skippedCount int64
 
 	for _, pkg := range reverseDeps {
 		wg.Add(1)
@@ -130,24 +137,18 @@ func (r *RegressionTestRunner) Run() error {
 			// First test with repo
 			err := r.melange.TestPackage(packageName, true, r.apkRepo)
 
-			// Skip package if YAML file not found
-			if errors.Is(err, ErrPackageYAMLNotFound) {
-				atomic.AddInt64(&skippedCount, 1)
-				r.updateProgress()
-				return
-			}
-
 			withRepoResult := TestResult{
 				Package:  packageName,
 				WithRepo: true,
 				Success:  err == nil,
 				Error:    err,
 				Hung:     errors.Is(err, ErrTestHung),
+				Skipped:  errors.Is(err, ErrPackageYAMLNotFound),
 			}
 			results <- withRepoResult
 
-			// Only test without repo if test with repo failed
-			if !withRepoResult.Success {
+			// Only test without repo if test with repo failed and wasn't skipped
+			if !withRepoResult.Success && !withRepoResult.Skipped {
 				err := r.melange.TestPackage(packageName, false, r.apkRepo)
 
 				// Skip if YAML file not found (shouldn't happen since we already checked, but for safety)
@@ -162,6 +163,7 @@ func (r *RegressionTestRunner) Run() error {
 					Success:  err == nil,
 					Error:    err,
 					Hung:     errors.Is(err, ErrTestHung),
+					Skipped:  errors.Is(err, ErrPackageYAMLNotFound),
 				}
 			}
 
@@ -175,10 +177,10 @@ func (r *RegressionTestRunner) Run() error {
 		close(results)
 	}()
 
-	return r.analyzeResults(results, len(reverseDeps), int(atomic.LoadInt64(&skippedCount)))
+	return r.analyzeResults(results, len(reverseDeps))
 }
 
-func (r *RegressionTestRunner) analyzeResults(results chan TestResult, expectedPackages int, skippedPackages int) error {
+func (r *RegressionTestRunner) analyzeResults(results chan TestResult, expectedPackages int) error {
 	packageResults := make(map[string]map[bool]TestResult)
 
 	for result := range results {
@@ -190,7 +192,7 @@ func (r *RegressionTestRunner) analyzeResults(results chan TestResult, expectedP
 
 	var regressions []string
 	var hungTests []string
-	var successCount, failureCount int
+	var successCount, failureCount, skippedCount int
 
 	fmt.Println("\n=== Test Results ===")
 	for pkg, results := range packageResults {
@@ -202,19 +204,28 @@ func (r *RegressionTestRunner) analyzeResults(results chan TestResult, expectedP
 			continue
 		}
 
-		// Check for hung tests first
+		// Check for skipped tests first
+		if withRepoResult.Skipped {
+			skippedCount++
+			if r.verbose {
+				fmt.Printf("⏭️  %s: SKIPPED (YAML file not found)\n", pkg)
+			}
+			continue
+		}
+
+		// Check for hung tests
 		if withRepoResult.Hung {
 			hungTests = append(hungTests, fmt.Sprintf("%s (with repo)", pkg))
-			fmt.Printf("⏰ %s: HUNG (with repo - killed after 30 minutes)\n", pkg)
+			fmt.Printf("⏰ %s: HUNG (with repo - killed after %v)\n", pkg, r.hangTimeout)
 			if hasWithoutRepo && withoutRepoResult.Hung {
 				hungTests = append(hungTests, fmt.Sprintf("%s (without repo)", pkg))
-				fmt.Printf("⏰ %s: HUNG (without repo - killed after 30 minutes)\n", pkg)
+				fmt.Printf("⏰ %s: HUNG (without repo - killed after %v)\n", pkg, r.hangTimeout)
 			}
 			continue
 		}
 		if hasWithoutRepo && withoutRepoResult.Hung {
 			hungTests = append(hungTests, fmt.Sprintf("%s (without repo)", pkg))
-			fmt.Printf("⏰ %s: HUNG (without repo - killed after 30 minutes)\n", pkg)
+			fmt.Printf("⏰ %s: HUNG (without repo - killed after %v)\n", pkg, r.hangTimeout)
 			continue
 		}
 
@@ -243,8 +254,8 @@ func (r *RegressionTestRunner) analyzeResults(results chan TestResult, expectedP
 
 	fmt.Printf("\n=== Summary ===\n")
 	fmt.Printf("Total packages found: %d\n", expectedPackages)
-	fmt.Printf("Packages skipped (no YAML): %d\n", skippedPackages)
-	fmt.Printf("Packages tested: %d\n", len(packageResults))
+	fmt.Printf("Packages skipped (no YAML): %d\n", skippedCount)
+	fmt.Printf("Packages tested: %d\n", len(packageResults)-skippedCount)
 	fmt.Printf("Regressions detected: %d\n", len(regressions))
 	fmt.Printf("Hung tests: %d\n", len(hungTests))
 	fmt.Printf("Successful packages: %d\n", successCount)

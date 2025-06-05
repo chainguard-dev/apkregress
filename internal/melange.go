@@ -11,9 +11,10 @@ import (
 )
 
 type MelangeClient struct {
-	repoPath string
-	verbose  bool
-	logDir   string
+	repoPath    string
+	verbose     bool
+	logDir      string
+	hangTimeout time.Duration
 }
 
 // ErrPackageYAMLNotFound indicates that the package YAML file doesn't exist
@@ -22,11 +23,12 @@ var ErrPackageYAMLNotFound = errors.New("package YAML file not found")
 // ErrTestHung indicates that a test exceeded the timeout and was killed
 var ErrTestHung = errors.New("test hung and was killed after timeout")
 
-func NewMelangeClient(repoPath string, verbose bool, logDir string) *MelangeClient {
+func NewMelangeClient(repoPath string, verbose bool, logDir string, hangTimeout time.Duration) *MelangeClient {
 	return &MelangeClient{
-		repoPath: repoPath,
-		verbose:  verbose,
-		logDir:   logDir,
+		repoPath:    repoPath,
+		verbose:     verbose,
+		logDir:      logDir,
+		hangTimeout: hangTimeout,
 	}
 }
 
@@ -82,8 +84,8 @@ func (m *MelangeClient) TestPackage(packageName string, withRepo bool, apkRepo s
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 
-	// Create context with 30-minute timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	// Create context with configurable timeout
+	ctx, cancel := context.WithTimeout(context.Background(), m.hangTimeout)
 	defer cancel()
 
 	// Start the command
@@ -113,10 +115,10 @@ func (m *MelangeClient) TestPackage(packageName string, withRepo bool, apkRepo s
 		<-done
 
 		// Write timeout message to log
-		fmt.Fprintf(logFile, "\n\n=== TEST HUNG - KILLED AFTER 30 MINUTES ===\n")
+		fmt.Fprintf(logFile, "\n\n=== TEST HUNG - KILLED AFTER %v ===\n", m.hangTimeout)
 
 		if m.verbose {
-			fmt.Printf("Test %s hung and was killed after 30 minutes\n", packageName)
+			fmt.Printf("Test %s hung and was killed after %v\n", packageName, m.hangTimeout)
 		}
 
 		return ErrTestHung

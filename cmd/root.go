@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/javacruft/apk-regression-test-runner/internal"
 	"github.com/spf13/cobra"
@@ -16,6 +17,7 @@ var (
 	repoType    string
 	concurrency int
 	verbose     bool
+	hangTimeout time.Duration
 )
 
 var rootCmd = &cobra.Command{
@@ -39,6 +41,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&repoType, "repo-type", "t", "wolfi", "Repository type: wolfi, enterprise, or extras")
 	rootCmd.PersistentFlags().IntVarP(&concurrency, "concurrency", "c", 4, "Number of concurrent test jobs")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+	rootCmd.PersistentFlags().DurationVar(&hangTimeout, "hang-timeout", 10*time.Minute, "Timeout for hung tests (default: 10m)")
 
 	rootCmd.MarkPersistentFlagRequired("package")
 	rootCmd.MarkPersistentFlagRequired("repo")
@@ -63,6 +66,6 @@ func runRegressionTest(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid repository type: %s (must be wolfi, enterprise, or extras)", repoType)
 	}
 
-	runner := internal.NewRegressionTestRunner(packageName, apkRepo, repoPath, repoType, concurrency, verbose)
+	runner := internal.NewRegressionTestRunner(packageName, apkRepo, repoPath, repoType, concurrency, verbose, hangTimeout)
 	return runner.Run()
 }
