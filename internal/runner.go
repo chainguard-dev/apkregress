@@ -80,9 +80,9 @@ func NewRegressionTestRunner(packageName, apkRepo, repoPath, repoType string, co
 	timestamp := time.Now().Format("20060102-150405")
 	logDir := filepath.Join("logs", fmt.Sprintf("regression-test-%s-%s", packageName, timestamp))
 
-	// Default to 10 minutes if no timeout specified
+	// Default to 30 minutes if no timeout specified
 	if hangTimeout == 0 {
-		hangTimeout = 10 * time.Minute
+		hangTimeout = 30 * time.Minute
 	}
 
 	return &RegressionTestRunner{

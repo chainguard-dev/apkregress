@@ -41,7 +41,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&repoType, "repo-type", "t", "wolfi", "Repository type: wolfi, enterprise, or extras")
 	rootCmd.PersistentFlags().IntVarP(&concurrency, "concurrency", "c", 4, "Number of concurrent test jobs")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
-	rootCmd.PersistentFlags().DurationVar(&hangTimeout, "hang-timeout", 10*time.Minute, "Timeout for hung tests (default: 10m)")
+	rootCmd.PersistentFlags().DurationVar(&hangTimeout, "hang-timeout", 30*time.Minute, "Timeout for hung tests (default: 30m)")
 
 	rootCmd.MarkPersistentFlagRequired("package")
 	rootCmd.MarkPersistentFlagRequired("repo")
