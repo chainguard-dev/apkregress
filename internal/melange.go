@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"time"
 )
 
@@ -83,6 +84,8 @@ func (m *MelangeClient) TestPackage(packageName string, withRepo bool, apkRepo s
 	cmd.Dir = m.repoPath
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
+	// Set up process group so we can kill all child processes on timeout
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	// Create context with configurable timeout
 	ctx, cancel := context.WithTimeout(context.Background(), m.hangTimeout)
@@ -107,9 +110,17 @@ func (m *MelangeClient) TestPackage(packageName string, withRepo bool, apkRepo s
 		}
 		return nil
 	case <-ctx.Done():
-		// Timeout occurred, kill the process
+		// Timeout occurred, kill the entire process group
 		if cmd.Process != nil {
-			cmd.Process.Kill()
+			// Kill the entire process group to ensure all child processes are terminated
+			pgid, err := syscall.Getpgid(cmd.Process.Pid)
+			if err == nil {
+				// Kill the process group (negative PID kills the group)
+				syscall.Kill(-pgid, syscall.SIGKILL)
+			} else {
+				// Fallback to killing just the main process
+				cmd.Process.Kill()
+			}
 		}
 		// Wait for the process to actually exit
 		<-done
