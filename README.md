@@ -41,11 +41,14 @@ go build -o apk-regression-test-runner .
 ### Options
 
 - `--package, -p`: Package name to find reverse dependencies for (required)
+- `--package-file, -f`: File containing list of package names (one per line)
 - `--repo, -r`: APK repository URL to test against (required)
 - `--repo-path, -w`: Path to package repository (required)
 - `--repo-type, -t`: Repository type: wolfi, enterprise, or extras (default: wolfi)
 - `--concurrency, -c`: Number of concurrent test jobs (default: 4)
 - `--verbose, -v`: Enable verbose output
+- `--markdown, -m`: Output test summary in markdown format for GitHub issues
+- `--hang-timeout`: Timeout for hung tests (default: 30m)
 
 ### Examples
 
@@ -102,5 +105,14 @@ The tool provides a summary showing:
 - Number of regressions detected
 - Successful and failed packages
 - List of packages with regressions
+
+Additionally, detailed result lists are written to the logs directory:
+- `successful.txt`: Packages that passed all tests
+- `failed.txt`: Packages that failed consistently
+- `regressions.txt`: Packages showing regressions
+- `hung.txt`: Packages that exceeded timeout
+- `skipped.txt`: Packages that were skipped
+
+Use `--markdown` flag to output the summary in markdown format suitable for GitHub issues.
 
 Exit code 1 indicates regressions were found.
