@@ -41,15 +41,18 @@ type RegressionTestRunner struct {
 }
 
 func (r *RegressionTestRunner) updateProgress() {
-	if r.verbose {
-		return // Don't show progress in verbose mode
+	// Check current value before incrementing
+	current := atomic.LoadInt64(&r.completedTests)
+	total := r.totalTests
+
+	if current >= total {
+		return // Already at or past completion
 	}
 
 	completed := atomic.AddInt64(&r.completedTests, 1)
-	total := r.totalTests
 
-	if completed > total {
-		return // Safety check
+	if r.verbose {
+		return // Don't show progress in verbose mode
 	}
 
 	// Calculate progress percentage
