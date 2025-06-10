@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/javacruft/apk-regression-test-runner/cmd"
+	"github.com/javacruft/apkregress/cmd"
 )
 
 func main() {

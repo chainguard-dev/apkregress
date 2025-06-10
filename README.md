@@ -1,4 +1,4 @@
-# APK Regression Test Runner
+# apkregress
 
 A Go-based tool that uses apkrane to generate a list of reverse dependencies of a provided package and then uses melange to run the test makefile target for each package against a provided APK repository. If a package test fails, it repeats the test without the provided APK repository to detect regressions.
 
@@ -23,13 +23,13 @@ A Go-based tool that uses apkrane to generate a list of reverse dependencies of 
 ## Installation
 
 ```bash
-go build -o apk-regression-test-runner .
+go build -o apkregress .
 ```
 
 ## Usage
 
 ```bash
-./apk-regression-test-runner \
+./apkregress \
   --package <package-name> \
   --repo <apk-repository-url> \
   --repo-path <path-to-package-repo> \

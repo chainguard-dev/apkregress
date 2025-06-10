@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/javacruft/apk-regression-test-runner/internal"
+	"github.com/javacruft/apkregress/internal"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +25,7 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "apk-regression-test-runner",
+	Use:   "apkregress",
 	Short: "Test reverse dependencies of a package for regressions",
 	Long: `A tool that uses apkrane to find reverse dependencies of a package
 and melange to test each reverse dependency against a provided APK repository.

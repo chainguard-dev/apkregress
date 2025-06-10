@@ -1,4 +1,4 @@
-module github.com/javacruft/apk-regression-test-runner
+module github.com/javacruft/apkregress
 
 go 1.21
 
