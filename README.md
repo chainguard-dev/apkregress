@@ -54,7 +54,7 @@ go build -o apkregress .
 
 #### Wolfi Repository
 ```bash
-./apk-regression-test-runner \
+./apkregress \
   --package openssl \
   --repo https://packages.wolfi.dev/os/x86_64/APKINDEX.tar.gz \
   --repo-path /path/to/wolfi-dev/os \
@@ -66,7 +66,7 @@ go build -o apkregress .
 #### Enterprise Repository
 ```bash
 # Requires chainctl authentication
-./apk-regression-test-runner \
+./apkregress \
   --package openssl \
   --repo https://apk.cgr.dev/chainguard-private/x86_64/APKINDEX.tar.gz \
   --repo-path /path/to/chainguard-dev/enterprise-packages \
@@ -78,7 +78,7 @@ go build -o apkregress .
 #### Extras Repository
 ```bash
 # Requires chainctl authentication
-./apk-regression-test-runner \
+./apkregress \
   --package openssl \
   --repo https://packages.cgr.dev/extras/x86_64/APKINDEX.tar.gz \
   --repo-path /path/to/chainguard-dev/extra-packages \
