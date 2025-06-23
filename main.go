@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/javacruft/apkregress/cmd"
+	"github.com/chainguard-dev/apkregress/cmd"
 )
 
 func main() {
