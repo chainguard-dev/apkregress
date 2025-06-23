@@ -1,4 +1,4 @@
-module github.com/javacruft/apkregress
+module github.com/chainguard-dev/apkregress
 
 go 1.21
 

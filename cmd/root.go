@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/javacruft/apkregress/internal"
+	"github.com/chainguard-dev/apkregress/internal"
 	"github.com/spf13/cobra"
 )
 
